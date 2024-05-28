@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+cd "$(dirname "$0")"
+
+if [[ -z "${VIRTUAL_ENV:-}" ]]; then
+    poetry install
+    exec poetry run "$0" "$@"
+fi
+
+echo "Running at $(date)"
+
+./winds_pleasure.py
+curl -fsSL "${HEALTHCHECK_URL}"
+echo
