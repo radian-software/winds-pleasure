@@ -138,7 +138,7 @@ def do_test(args):
                     policy=default_email_policy.clone(max_line_length=99999)
                 ).parse(f),
             )
-        old_html = em.get_body().get_payload()
+        old_html = em.get_body().get_payload(decode=True).decode()
         soup = bs4.BeautifulSoup(old_html, "lxml")
         for attr in dir(transforms):
             if not attr.startswith("wp_"):
@@ -171,8 +171,8 @@ def do_test(args):
         for item in items:
             f.write(
                 f"""
-    <iframe src="{item}.in.html"></iframe>
-    <iframe src="{item}.out.html"></iframe>
+    <iframe src="{item}.in.html" style="width: 40%; height: 80vh"></iframe>
+    <iframe src="{item}.out.html" style="width: 40%; height: 80vh"></iframe>
             """.strip()
             )
         f.write(
