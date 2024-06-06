@@ -139,7 +139,13 @@ def do_test(args):
                 ).parse(f),
             )
         old_html = em.get_body().get_payload(decode=True).decode()
-        soup = bs4.BeautifulSoup(old_html, "lxml")
+        # Use html.parser instead of lxml, because, and I swear to
+        # fucking god I am not making this up, some companies are
+        # sending me emails that have multiple top-level <html> tags
+        # and apparently this massive standards violation is silently
+        # corrected by browsers while lxml correctly throws away the
+        # extra document tacked at the end.
+        soup = bs4.BeautifulSoup(old_html, "html.parser")
         for attr in dir(transforms):
             if not attr.startswith("wp_"):
                 continue
