@@ -4,17 +4,33 @@ import argparse
 from contextlib import contextmanager
 import email
 from email.headerregistry import Address
+from email.message import EmailMessage
+from email.parser import Parser as EmailParser
 from email.policy import default as default_email_policy
 import getpass
+import importlib
 import mailbox
+import os
 from pathlib import Path
 import re
 import smtplib
 import sqlite3
 import subprocess
 import sys
+import tempfile
 from typing import Any, cast
 import uuid
+import webbrowser
+
+import bs4
+
+
+if transforms_dir := os.environ.get("WP_TRANSFORMS_DIR"):
+    transforms_dir = str(Path(transforms_dir).resolve())
+    sys.path.append(transforms_dir)
+    transforms = importlib.import_module("winds_pleasure_transforms")
+else:
+    transforms = transforms_dir = None
 
 
 class WindsPleasure:
@@ -108,12 +124,64 @@ def do_process_mail(args):
 
 
 def do_test(args):
-    pass
+    if not transforms_dir:
+        raise RuntimeError("Transforms directory not specified, cannot test")
+    tmpdir = Path(tempfile.mkdtemp())
+    items = []
+    for item in (Path(transforms_dir) / "emails").iterdir():
+        if item.suffixes != [".in", ".eml"]:
+            continue
+        with open(item) as f:
+            em = cast(Any, EmailParser(policy=default_email_policy).parse(f))
+        old_html = em.get_body().as_string()
+        soup = bs4.BeautifulSoup(old_html, "lxml")
+        for attr in dir(transforms):
+            if not attr.startswith("wp_"):
+                continue
+            transform = getattr(transforms, attr)
+            if not callable(transform):
+                continue
+            print(attr, transform)
+            if new_soup := transform(soup, em):
+                soup = new_soup
+        new_html = str(soup)
+        with open(tmpdir / item.with_suffix(".html"), "w") as f:
+            f.write(old_html)
+        with open(tmpdir / item.with_suffix("").with_suffix(".out.html"), "w") as f:
+            f.write(new_html)
+        items.append(item.with_suffix("").with_suffix(""))
+    with open(tmpdir / "viewer.html", "w") as f:
+        f.write(
+            """
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Wind's Pleasure Diff Viewer</title>
+  </head>
+  <body style="display: flex">
+        """.strip()
+        )
+        for item in items:
+            f.write(
+                f"""
+    <iframe src="{item}.in.html"></iframe>
+    <iframe src="{item}.out.html"></iframe>
+            """.strip()
+            )
+        f.write(
+            """
+  </body>
+</html>
+
+        """.strip()
+        )
+    webbrowser.open_new_tab(str(tmpdir / "viewer.html"))
 
 
 def main():
     parser = argparse.ArgumentParser()
-    subparsers = parser.add_subparsers()
+    subparsers = parser.add_subparsers(required=True)
     parser_process_mail = subparsers.add_parser("process-mail")
     parser_process_mail.set_defaults(do=do_process_mail)
     parser_test = subparsers.add_parser("test")
