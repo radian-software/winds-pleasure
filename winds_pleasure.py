@@ -132,8 +132,13 @@ def do_test(args):
         if item.suffixes != [".in", ".eml"]:
             continue
         with open(item) as f:
-            em = cast(Any, EmailParser(policy=default_email_policy).parse(f))
-        old_html = em.get_body().as_string()
+            em = cast(
+                Any,
+                EmailParser(
+                    policy=default_email_policy.clone(max_line_length=99999)
+                ).parse(f),
+            )
+        old_html = em.get_body().get_payload()
         soup = bs4.BeautifulSoup(old_html, "lxml")
         for attr in dir(transforms):
             if not attr.startswith("wp_"):
@@ -141,19 +146,20 @@ def do_test(args):
             transform = getattr(transforms, attr)
             if not callable(transform):
                 continue
-            print(attr, transform)
             if new_soup := transform(soup, em):
                 soup = new_soup
         new_html = str(soup)
-        with open(tmpdir / item.with_suffix(".html"), "w") as f:
+        with open(tmpdir / item.with_suffix(".html").name, "w") as f:
             f.write(old_html)
-        with open(tmpdir / item.with_suffix("").with_suffix(".out.html"), "w") as f:
+        with open(
+            tmpdir / item.with_suffix("").with_suffix(".out.html").name, "w"
+        ) as f:
             f.write(new_html)
-        items.append(item.with_suffix("").with_suffix(""))
+        items.append(item.with_suffix("").with_suffix("").name)
     with open(tmpdir / "viewer.html", "w") as f:
         f.write(
             """
-<!doctype html>
+<!DOCTYPE html>
 <html>
   <head>
     <meta charset="utf-8" />
