@@ -7,36 +7,45 @@ from email.headerregistry import Address
 from email.policy import default as default_email_policy
 import getpass
 import mailbox
+from pathlib import Path
 import re
 import smtplib
 import sqlite3
 import subprocess
 import sys
+from typing import Any, cast
 import uuid
 
-class WindsPleasure:
 
-    def __init__(self, spool: mailbox.Mailbox, sql: sqlite3.Connection, smtp: smtplib.SMTP):
+class WindsPleasure:
+    def __init__(
+        self, spool: mailbox.Mailbox, sql: sqlite3.Connection, smtp: smtplib.SMTP
+    ):
         self.spool = spool
         self.sql = sql
         self.smtp = smtp
 
     def init_schema(self):
-        self.sql.executescript("""
+        self.sql.executescript(
+            """
           CREATE TABLE IF NOT EXISTS emails (
             original TEXT NOT NULL,
             modified TEXT NOT NULL
           );
-        """)
+        """
+        )
         self.sql.commit()
 
     @contextmanager
     def recording_email(self, original: mailbox.Message, modified: mailbox.Message):
         try:
-            self.sql.execute("""
+            self.sql.execute(
+                """
               INSERT INTO emails (original, modified)
               VALUES (?, ?)
-            """, (original.as_string(), modified.as_string()))
+            """,
+                (original.as_string(), modified.as_string()),
+            )
             yield
             self.sql.commit()
         finally:
@@ -45,7 +54,9 @@ class WindsPleasure:
     def run(self):
         self.init_schema()
         for key, original_mail in self.spool.items():
-            print(f"Processing mail from {original_mail['from']} with subject: {original_mail['subject']}")
+            print(
+                f"Processing mail from {original_mail['from']} with subject: {original_mail['subject']}"
+            )
             modified_mail = self.transform(original_mail)
             with self.recording_email(original_mail, modified_mail):
                 self.resend(modified_mail)
@@ -53,15 +64,19 @@ class WindsPleasure:
 
     def _get_from_addr(self, mail: mailbox.Message):
         username, domain = mail["delivered-to"].split("@")
-        return str(Address(
-            display_name=mail["from"].addresses[0].display_name + " via YALB Despam",
-            username=username,
-            domain=domain,
-        ))
+        from_addr = cast(Any, mail["from"])
+        return str(
+            Address(
+                display_name=from_addr.addresses[0].display_name + " via YALB Despam",
+                username=username,
+                domain=domain,
+            )
+        )
 
     def _get_message_id(self, mail: mailbox.Message):
         username, orig_domain = re.sub(r"[<>]", "", mail["message-id"]).split("@")
-        new_domain = mail["from"].addresses[0].domain
+        from_addr = cast(Any, mail["from"])
+        new_domain = from_addr.addresses[0].domain
         return str(Address(username=username, domain=new_domain))
 
     def transform(self, mail: mailbox.Message):
@@ -75,20 +90,37 @@ class WindsPleasure:
     def resend(self, mail: mailbox.Message):
         self.smtp.sendmail(mail["from"], mail["to"], mail.as_string())
 
-def main():
-    parser = argparse.ArgumentParser()
-    args = parser.parse_args()
-    with sqlite3.connect("mail.db", autocommit=False) as sql:
+
+def do_process_mail(args):
+    with sqlite3.connect("mail.db") as sql:
         with smtplib.SMTP("localhost") as smtp:
             spool = mailbox.mbox(
                 f"/var/spool/mail/{getpass.getuser()}",
-                lambda msg: mailbox.mboxMessage(email.message_from_binary_file(msg, policy=default_email_policy)),
+                lambda msg: mailbox.mboxMessage(
+                    email.message_from_binary_file(msg, policy=default_email_policy)
+                ),
             )
             try:
                 spool.lock()
                 WindsPleasure(spool, sql, smtp).run()
             finally:
                 spool.close()
+
+
+def do_test(args):
+    pass
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers()
+    parser_process_mail = subparsers.add_parser("process-mail")
+    parser_process_mail.set_defaults(do=do_process_mail)
+    parser_test = subparsers.add_parser("test")
+    parser_test.set_defaults(do=do_test)
+    args = parser.parse_args()
+    args.do(args)
+
 
 if __name__ == "__main__":
     main()
