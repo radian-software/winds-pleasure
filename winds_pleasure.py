@@ -2,6 +2,7 @@
 
 import argparse
 from contextlib import contextmanager
+import copy
 import email
 from email.headerregistry import Address
 from email.message import EmailMessage
@@ -13,6 +14,7 @@ import mailbox
 import os
 from pathlib import Path
 import re
+import shutil
 import smtplib
 import sqlite3
 import subprocess
@@ -123,6 +125,12 @@ def do_process_mail(args):
                 spool.close()
 
 
+def with_replaced_content(email: EmailMessage, html: str) -> EmailMessage:
+    new_email = cast(Any, copy.deepcopy(email))
+    new_email.get_body().set_content(html, cte="quoted-printable")
+    return new_email
+
+
 def do_test(args):
     if not transforms_dir:
         raise RuntimeError("Transforms directory not specified, cannot test")
@@ -146,6 +154,10 @@ def do_test(args):
         # corrected by browsers while lxml correctly throws away the
         # extra document tacked at the end.
         soup = bs4.BeautifulSoup(old_html, "html.parser")
+        with open(item.with_suffix("").with_suffix(".norm.eml"), "w") as f:
+            f.write(str(with_replaced_content(em, str(soup))))
+        with open(item.with_suffix("").with_suffix(".fmt.norm.eml"), "w") as f:
+            f.write(str(with_replaced_content(em, soup.prettify())))
         for attr in dir(transforms):
             if not attr.startswith("wp_"):
                 continue
@@ -155,40 +167,46 @@ def do_test(args):
             if new_soup := transform(soup, em):
                 soup = new_soup
         new_html = str(soup)
-        with open(tmpdir / item.with_suffix(".html").name, "w") as f:
-            f.write(old_html)
-        with open(
-            tmpdir / item.with_suffix("").with_suffix(".out.html").name, "w"
-        ) as f:
-            f.write(new_html)
-        items.append(item.with_suffix("").with_suffix("").name)
-    with open(tmpdir / "viewer.html", "w") as f:
-        f.write(
-            """
-<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Wind's Pleasure Diff Viewer</title>
-  </head>
-  <body style="display: flex">
-        """.strip()
-        )
-        for item in items:
+        with open(item.with_suffix("").with_suffix(".out.eml"), "w") as f:
+            f.write(str(with_replaced_content(em, str(soup))))
+        with open(item.with_suffix("").with_suffix(".fmt.out.eml"), "w") as f:
+            f.write(str(with_replaced_content(em, soup.prettify())))
+        if args.open:
+            with open(tmpdir / item.with_suffix(".html").name, "w") as f:
+                f.write(old_html)
+            with open(
+                tmpdir / item.with_suffix("").with_suffix(".out.html").name, "w"
+            ) as f:
+                f.write(new_html)
+            items.append(item.with_suffix("").with_suffix("").name)
+    if items:
+        with open(tmpdir / "viewer.html", "w") as f:
             f.write(
-                f"""
-    <iframe src="{item}.in.html" style="width: 40%; height: 80vh"></iframe>
-    <iframe src="{item}.out.html" style="width: 40%; height: 80vh"></iframe>
+                """
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Wind's Pleasure Diff Viewer</title>
+      </head>
+      <body style="display: flex">
             """.strip()
             )
-        f.write(
-            """
-  </body>
-</html>
+            for item in items:
+                f.write(
+                    f"""
+        <iframe src="{item}.in.html" style="width: 40%; height: 80vh"></iframe>
+        <iframe src="{item}.out.html" style="width: 40%; height: 80vh"></iframe>
+                """.strip()
+                )
+            f.write(
+                """
+      </body>
+    </html>
 
-        """.strip()
-        )
-    webbrowser.open_new_tab(str(tmpdir / "viewer.html"))
+            """.strip()
+            )
+        webbrowser.open_new_tab(str(tmpdir / "viewer.html"))
 
 
 def main():
@@ -197,6 +215,7 @@ def main():
     parser_process_mail = subparsers.add_parser("process-mail")
     parser_process_mail.set_defaults(do=do_process_mail)
     parser_test = subparsers.add_parser("test")
+    parser_test.add_argument("-o", "--open", action="store_true")
     parser_test.set_defaults(do=do_test)
     args = parser.parse_args()
     args.do(args)
