@@ -98,6 +98,20 @@ class WindsPleasure:
         return str(Address(username=username, domain=new_domain))
 
     def transform(self, mail: mailbox.Message):
+        if not transforms_dir:
+            raise RuntimeError("Transforms directory not specified, cannot process")
+        old_html = mail.get_body().get_payload(decode=True).decode()
+        soup = bs4.BeautifulSoup(old_html, "html.parser")
+        for attr in dir(transforms):
+            if not attr.startswith("wp_"):
+                continue
+            transform = getattr(transforms, attr)
+            if not callable(transform):
+                continue
+            if new_soup := transform(soup, mail):
+                soup = new_soup
+        new_html = str(soup)
+        mail = with_replaced_content(mail, new_html)
         if not mail.get("reply-to"):
             mail["reply-to"] = mail["from"]
         mail.replace_header("from", self._get_from_addr(mail))
@@ -114,9 +128,7 @@ def do_process_mail(args):
         with smtplib.SMTP("localhost") as smtp:
             spool = mailbox.mbox(
                 f"/var/spool/mail/{getpass.getuser()}",
-                lambda msg: mailbox.mboxMessage(
-                    email.message_from_binary_file(msg, policy=default_email_policy)
-                ),
+                lambda msg: email.message_from_binary_file(msg, policy=default_email_policy),
             )
             try:
                 spool.lock()
@@ -127,7 +139,7 @@ def do_process_mail(args):
 
 def with_replaced_content(email: EmailMessage, html: str) -> EmailMessage:
     new_email = cast(Any, copy.deepcopy(email))
-    new_email.get_body().set_content(html, cte="quoted-printable")
+    new_email.get_body().set_content(html, subtype="html", cte="quoted-printable")
     return new_email
 
 

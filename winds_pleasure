@@ -11,6 +11,6 @@ fi
 
 echo "Running at $(date)"
 
-python3 -m winds_pleasure process-mail
+python3 -u -m winds_pleasure process-mail
 curl -fsSL "${HEALTHCHECK_URL}"
 echo
