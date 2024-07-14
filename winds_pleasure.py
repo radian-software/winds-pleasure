@@ -128,7 +128,9 @@ def do_process_mail(args):
         with smtplib.SMTP("localhost") as smtp:
             spool = mailbox.mbox(
                 f"/var/spool/mail/{getpass.getuser()}",
-                lambda msg: email.message_from_binary_file(msg, policy=default_email_policy),
+                lambda msg: email.message_from_binary_file(
+                    msg, policy=default_email_policy
+                ),
             )
             try:
                 spool.lock()
@@ -149,6 +151,8 @@ def do_test(args):
     tmpdir = Path(tempfile.mkdtemp())
     items = []
     for item in (Path(transforms_dir) / "emails").iterdir():
+        if args.filter not in item.with_suffix("").name:
+            continue
         if item.suffixes != [".in", ".eml"]:
             continue
         with open(item) as f:
@@ -228,6 +232,7 @@ def main():
     parser_process_mail.set_defaults(do=do_process_mail)
     parser_test = subparsers.add_parser("test")
     parser_test.add_argument("-o", "--open", action="store_true")
+    parser_test.add_argument("-f", "--filter", default="")
     parser_test.set_defaults(do=do_test)
     args = parser.parse_args()
     args.do(args)
