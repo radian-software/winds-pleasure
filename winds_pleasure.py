@@ -48,7 +48,8 @@ class WindsPleasure:
             """
           CREATE TABLE IF NOT EXISTS emails (
             original TEXT NOT NULL,
-            modified TEXT NOT NULL
+            modified TEXT NOT NULL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
           );
         """
         )
