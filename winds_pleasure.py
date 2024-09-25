@@ -101,7 +101,7 @@ class WindsPleasure:
     def transform(self, mail: mailbox.Message):
         if not transforms_dir:
             raise RuntimeError("Transforms directory not specified, cannot process")
-        old_html = mail.get_body().get_payload(decode=True).decode()
+        old_html = mail.get_body().get_payload(decode=True).decode(errors="replace")
         soup = bs4.BeautifulSoup(old_html, "html.parser")
         for attr in dir(transforms):
             if not attr.startswith("wp_"):
