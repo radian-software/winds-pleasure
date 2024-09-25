@@ -163,7 +163,7 @@ def do_test(args):
                     policy=default_email_policy.clone(max_line_length=99999)
                 ).parse(f),
             )
-        old_html = em.get_body().get_payload(decode=True).decode()
+        old_html = em.get_body().get_payload(decode=True).decode(errors="replace")
         # Use html.parser instead of lxml, because, and I swear to
         # fucking god I am not making this up, some companies are
         # sending me emails that have multiple top-level <html> tags
