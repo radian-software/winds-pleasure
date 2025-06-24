@@ -74,7 +74,7 @@ class WindsPleasure:
         self.init_schema()
         for key, original_mail in self.spool.items():
             print(
-                f"Processing mail from {original_mail['from']} with subject: {original_mail['subject']}"
+                f"Processing mail from {original_mail['from']} with subject: {repr(original_mail['subject'])}"
             )
             modified_mail = self.transform(original_mail)
             with self.recording_email(original_mail, modified_mail):
@@ -116,7 +116,9 @@ class WindsPleasure:
         if not mail.get("reply-to"):
             mail["reply-to"] = mail["from"]
         mail.replace_header("from", self._get_from_addr(mail))
-        mail.replace_header("subject", mail["subject"] + " (via YALB Despam)")
+        mail.replace_header(
+            "subject", re.sub(r" *[\n\r]+ *", " ", mail["subject"]) + " (via YALB Despam)",
+        )
         mail.replace_header("message-id", self._get_message_id(mail))
         return mail
 
